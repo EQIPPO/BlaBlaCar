@@ -1,0 +1,40 @@
+<html>
+
+<head>
+    <title>Реєстрація - БлаБлаКар</title>
+    <script src="blablacar.js"></script>
+</head>
+
+<body>
+    <h2>Реєстрація</h2>
+    <form id="loginForm" method="post">
+        <input type="text" name="name" placeholder="Ім'я">
+        <input type="text" name="login" placeholder="Логін">
+        <input type="password" name="password" placeholder="Пароль">
+        <input type="submit" value="Зареєструватись">
+    </form>
+    <span id="loginError"></span>
+
+    <script>
+        const loginForm = document.getElementById("loginForm");
+        const loginError = document.getElementById("loginError");
+        if (blablacar.isLoggedIn()) {
+            window.location.href = "/";
+        }
+        else {
+            loginForm.addEventListener("submit", function (event) {
+                event.preventDefault();
+                var form = this;
+                const data = parseForm(form);
+                blablacar.register(data.login, data.password, data.name)
+                    .then(function (user) {
+                        window.location.href = "/";
+                    })
+                    .catch(function (error) {
+                        loginError.innerText = error;
+                    });
+            });
+        }
+    </script>
+</body>
+</html>

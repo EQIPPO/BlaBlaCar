@@ -1,0 +1,39 @@
+<html>
+
+<head>
+    <title>Вхід - БлаБлаКар</title>
+    <script src="blablacar.js"></script>
+</head>
+
+<body>
+    <h2>Вхід</h2>
+    <form id="loginForm" method="post">
+        <input type="text" name="login" placeholder="Логін">
+        <input type="password" name="password" placeholder="Пароль">
+        <input type="submit" value="Вхід">
+    </form>
+    <span id="loginError"></span>
+
+    <script>
+        const loginForm = document.getElementById("loginForm");
+        const loginError = document.getElementById("loginError");
+        if (blablacar.isLoggedIn()) {
+            window.location.href = "/";
+        }
+        else {
+            loginForm.addEventListener("submit", function (event) {
+                event.preventDefault();
+                var form = this;
+                const data = parseForm(form);
+                blablacar.login(data.login, data.password)
+                    .then(function (user) {
+                        window.location.href = "/";
+                    })
+                    .catch(function (error) {
+                        loginError.innerText = error;
+                    });
+            });
+        }
+    </script>
+</body>
+</html>

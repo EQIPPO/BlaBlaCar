@@ -1,0 +1,38 @@
+<html>
+
+<head>
+    <title>БлаБлаКар</title>
+    <script src="blablacar.js"></script>
+</head>
+
+<body>
+    <h1>API Тест</h1>
+    <div>
+        <div id="headerLoginButton">
+            <a href="login.html">Вхід</a>
+            <a href="register.html">Реєстрація</a>
+        </div>
+
+        <div id="headerUser" style="display: none">
+            <span id="headerUserName"></span>
+            <a href="logout.html">Вихід</a>
+        </div>
+
+        <script>
+            if (blablacar.isLoggedIn()) {
+                document.getElementById("headerLoginButton").style.display = "none";
+                document.getElementById("headerUser").style.display = "block";
+                document.getElementById("headerUserName").innerText = blablacar.getCurrentUser().name;
+            }
+            else {
+                document.getElementById("headerLoginButton").style.display = "block";
+                document.getElementById("headerUser").style.display = "none";
+            }
+        </script>
+        
+
+        
+    </div>
+</body>
+
+</html>
