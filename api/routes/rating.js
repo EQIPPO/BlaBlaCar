@@ -22,7 +22,7 @@ module.exports = (database) => {
             });
         }
 
-        const result = await database.getRatinsgs(user_id);
+        const result = await database.getRatings(user_id);
         res.status(result.status).json(result);
     });
 

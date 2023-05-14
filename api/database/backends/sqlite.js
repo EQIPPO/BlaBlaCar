@@ -61,6 +61,16 @@ module.exports = (connection_string) => {
                 });
             });
         },
+        findUserById: async (id) => {
+            return new Promise((resolve, reject) => {
+                db.all(`SELECT * FROM users WHERE id = ?`, [id], (err, rows) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve(rows);
+                });
+            });
+        },
         createUser: async (username, password, name) => {
             return new Promise((resolve, reject) => {
                 db.run(`INSERT INTO users (login, password, name) VALUES (?, ?, ?)`, [username, password, name], function (err) {
@@ -83,7 +93,7 @@ module.exports = (connection_string) => {
         },
         getRatings: async (user_id) => {
             return new Promise((resolve, reject) => {
-                db.all(`SELECT * FROM ratings WHERE user_id = ?`, [user_id], (err, rows) => {
+                db.all(`SELECT r.*, u.name AS creator_name FROM ratings r, users u WHERE r.user_id = ? AND r.creator_id = u.id`, [user_id], (err, rows) => {
                     if (err) {
                         reject(err);
                     }
@@ -103,7 +113,7 @@ module.exports = (connection_string) => {
         },
         getTrips: async (options) => {
             return new Promise((resolve, reject) => {
-                let query = `SELECT * FROM trips WHERE 1 = 1`;
+                let query = `SELECT trips.*, users.name AS driver_name FROM trips, users WHERE users.id = trips.driver_id`;
                 let params = [];
                 if (options) {
                     if (options.driver_id) {
@@ -137,7 +147,7 @@ module.exports = (connection_string) => {
         },
         getTrip: async (trip_id) => {
             return new Promise((resolve, reject) => {
-                db.all(`SELECT * FROM trips WHERE id = ?`, [trip_id], (err, rows) => {
+                db.all(`SELECT trips.*, users.name AS driver_name FROM trips, users WHERE trips.id = ? AND users.id = trips.driver_id`, [trip_id], (err, rows) => {
                     if (err) {
                         reject(err);
                     }
@@ -145,7 +155,7 @@ module.exports = (connection_string) => {
                 });
             });
         },
-        createTrip: async (driver_id, start, end, time, passengers, description) => {
+        addTrip: async (driver_id, start, end, time, passengers, description) => {
             return new Promise((resolve, reject) => {
                 db.run(`INSERT INTO trips (driver_id, start, end, time, passengers, description) VALUES (?, ?, ?, ?, ?, ?)`, [driver_id, start, end, time, passengers, description], function (err) {
                     if (err) {
@@ -162,6 +172,86 @@ module.exports = (connection_string) => {
                         reject(err);
                     }
                     resolve(rows);
+                });
+            });
+        },
+        getReservationsDriver: async (driver_id) => {
+            return new Promise((resolve, reject) => {
+                db.all(`SELECT * FROM reservations WHERE trip_id IN (SELECT id FROM trips WHERE driver_id = ?)`, [driver_id], (err, rows) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve(rows);
+                });
+            });
+        },
+        getReservationsPassenger: async (user_id) => {
+            return new Promise((resolve, reject) => {
+                db.all(`SELECT reservations.*, trips.start, trips.end, trips.time AS trip_time FROM reservations, trips WHERE reservations.user_id = ? AND reservations.trip_id = trips.id`, [user_id], (err, rows) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve(rows);
+                });
+            });
+        },
+        addReservation: async (trip_id, user_id, passengers) => {
+            return new Promise((resolve, reject) => {
+                db.run(`INSERT INTO reservations (trip_id, user_id, passengers) VALUES (?, ?, ?)`, [trip_id, user_id, passengers], function (err) {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve(this.lastID);
+                });
+            });
+        },
+        deleteReservation: async (reservation_id) => {
+            return new Promise((resolve, reject) => {
+                db.run(`DELETE FROM reservations WHERE id = ?`, [reservation_id], function (err) {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve();
+                });
+            });
+        },
+        deleteTrip: async (trip_id) => {
+            return new Promise((resolve, reject) => {
+                db.run(`DELETE FROM trips WHERE id = ?`, [trip_id], function (err) {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve();
+                });
+            });
+        },
+        getReservation: async (reservation_id) => {
+            return new Promise((resolve, reject) => {
+                db.all(`SELECT * FROM reservations WHERE id = ?`, [reservation_id], (err, rows) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve(rows);
+                });
+            });
+        },
+        addReservation: async (trip_id, user_id, comment) => {
+            return new Promise((resolve, reject) => {
+                db.run(`INSERT INTO reservations (trip_id, user_id, comment) VALUES (?, ?, ?)`, [trip_id, user_id, comment], function (err) {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve(this.lastID);
+                });
+            });
+        },
+        respondReservation: async (reservation_id, status, response) => {
+            return new Promise((resolve, reject) => {
+                db.run(`UPDATE reservations SET status = ?, response = ?, response_time = ? WHERE id = ?`, [status, response, new Date(), reservation_id], function (err) {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve();
                 });
             });
         }

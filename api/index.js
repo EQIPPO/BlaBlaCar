@@ -18,6 +18,7 @@ module.exports = (database) => {
     router.use('/rating', require('./routes/rating')(database));
     router.use('/reservations', require('./routes/reservations')(database));
     router.use('/trips', require('./routes/trips')(database));
+    router.use('/admin', require('./routes/admin')(database));
 
     // 404 handler
     router.use((req, res) => {

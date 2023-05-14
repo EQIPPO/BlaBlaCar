@@ -9,6 +9,7 @@ const database = require('./api/database')(backend);
 
 // Express
 const express = require('express');
+var cors = require('cors')
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -20,8 +21,12 @@ app.use(bodyParser.json());
 // Middleware
 const api = require('./api')(database);
 
+app.use(cors());
 app.use('/api', api);
 app.use(express.static('www'));
+app.use((req, res) => {
+    res.sendFile(__dirname + '/www/index.html');
+});
 
 app.listen(port, () => {
     console.log(`🚀 Server listening on port ${port}`);

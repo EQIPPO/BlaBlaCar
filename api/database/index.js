@@ -79,7 +79,7 @@ module.exports = (context) => {
                     id: user_id,
                     login: username
                 }, process.env.SECRET_KEY);
-            
+
                 return {
                     status: 200,
                     message: 'Registration successful',
@@ -125,15 +125,26 @@ module.exports = (context) => {
         },
         getRatings: async (user_id) => {
             try {
+                const user = await context.findUserById(user_id);
+                if (user.length === 0) {
+                    return {
+                        status: 404,
+                        message: 'User does not exist'
+                    };
+                }
+
                 const result = await context.getRatings(user_id);
                 let sum = 0;
                 for (let i = 0; i < result.length; i++) {
                     sum += result[i].rating;
                 }
                 const average = sum / result.length;
+
                 return {
                     status: 200,
                     message: 'Ratings retrieved successfully',
+                    name: user[0].name,
+                    created_at: user[0].created_at,
                     ratings: result,
                     average: average ? average : 0
                 };
@@ -182,14 +193,16 @@ module.exports = (context) => {
                 const result = await context.getTrips(options, token);
 
                 // only show trips that are not reserved or reserved by the user
-                const reservations = result.map(async (trip) => {
-                    return await context.getReservations(trip.id);
-                });
+                let reservations = [];
+                for (let i = 0; i < result.length; i++) {
+                    const trip = result[i];
+                    reservations.push(await context.getReservations(trip.id));
+                }
 
                 // if it's already reserved, check if it's reserved by the user
                 let filtered = [];
                 for (let i = 0; i < reservations.length; i++) {
-                    if (reservations[i].length !== 0 && reservations[i][0].status !== 1) {
+                    if (reservations[i].length !== 0 && reservations[i][0].status === 1) {
                         if (token) {
                             const user = jwt.verify(token, process.env.SECRET_KEY);
                             if (user && user.id === reservations[i][0].user_id) {
@@ -229,9 +242,9 @@ module.exports = (context) => {
 
                 // check it's reservations
                 const reservations = await context.getReservations(id);
-                
+
                 // if it's already reserved, check if it's reserved by the user
-                if (reservations.length !== 0 && reservations[0].status !== 1) {
+                if (reservations.length !== 0 && reservations[0].status === 1) {
                     if (token) {
                         const user = jwt.verify(token, process.env.SECRET_KEY);
                         if (!user) {
@@ -241,10 +254,10 @@ module.exports = (context) => {
                             };
                         }
 
-                        if (reservations[0].user_id !== user.id) {
+                        if (reservations[0].user_id !== user.id && result.driver_id !== user.id) {
                             return {
                                 status: 401,
-                                message: 'This trip is already reserved'
+                                message: 'This trip is already reserved by another user'
                             };
                         }
 
@@ -253,7 +266,7 @@ module.exports = (context) => {
                     else {
                         return {
                             status: 401,
-                            message: 'This trip is already reserved'
+                            message: 'This trip is already reserved and you are not logged in'
                         };
                     }
                 }
@@ -283,11 +296,11 @@ module.exports = (context) => {
                 }
 
                 const id = await context.addTrip(
-                    user.id, 
-                    options.start, 
-                    options.end, 
-                    options.time, 
-                    options.passengers, 
+                    user.id,
+                    options.start,
+                    options.end,
+                    options.time,
+                    options.passengers,
                     options.description || ''
                 );
 
@@ -295,6 +308,181 @@ module.exports = (context) => {
                     status: 200,
                     message: 'Trip added successfully',
                     id: id
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        isAdmin: async (token) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                const result = await context.findUser(user.login);
+                if (result.length === 0) {
+                    return {
+                        status: 404,
+                        message: 'User not found'
+                    };
+                }
+
+                return {
+                    status: 200,
+                    havePermission: result[0].is_admin
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        getReservationsDriver: async (token) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                const result = await context.getReservationsDriver(user.id);
+                return {
+                    status: 200,
+                    message: 'Reservations retrieved successfully',
+                    reservations: result
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        getReservationsPassenger: async (token) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                const result = await context.getReservationsPassenger(user.id);
+                return {
+                    status: 200,
+                    message: 'Reservations retrieved successfully',
+                    reservations: result
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        addReservation: async (tripId, comment, token) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                const trip = await context.getTrip(tripId);
+                if (trip.length === 0) {
+                    return {
+                        status: 404,
+                        message: 'Trip not found'
+                    };
+                }
+
+                const reservations = await context.getReservations(tripId);
+                if (reservations.length !== 0 && reservations[0].status !== 1) {
+                    return {
+                        status: 401,
+                        message: 'This trip is already reserved'
+                    };
+                }
+
+                await context.addReservation(tripId, user.id, comment);
+                return {
+                    status: 200,
+                    message: 'Reservation added successfully'
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        respondReservation: async (reservationId, response, comment, token) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                const reservation = await context.getReservation(reservationId);
+                if (reservation.length === 0) {
+                    return {
+                        status: 404,
+                        message: 'Reservation not found'
+                    };
+                }
+
+                const trip = await context.getTrip(reservation[0].trip_id);
+                if (trip.length === 0) {
+                    return {
+                        status: 404,
+                        message: 'Trip not found'
+                    };
+                }
+
+                if (trip[0].driver_id !== user.id) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                if (reservation[0].status !== 1) {
+                    return {
+                        status: 401,
+                        message: 'This reservation is already responded'
+                    };
+                }
+
+                await context.respondReservation(reservationId, response, comment);
+                return {
+                    status: 200,
+                    message: 'Reservation responded successfully'
                 };
             }
             catch (err) {
