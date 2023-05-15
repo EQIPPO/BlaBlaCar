@@ -48,6 +48,17 @@ module.exports = (connection_string) => {
             FOREIGN KEY (user_id) REFERENCES users (id),
             FOREIGN KEY (creator_id) REFERENCES users (id)
         )`);
+
+        // Trigger to delete reservations when trip is deleted
+        db.run(`CREATE TRIGGER IF NOT EXISTS delete_user_trigger
+            AFTER DELETE ON users
+            FOR EACH ROW
+            BEGIN
+                DELETE FROM ratings WHERE user_id = OLD.id OR creator_id = OLD.id;
+                DELETE FROM trips WHERE driver_id = OLD.id;
+                DELETE FROM reservations WHERE user_id = OLD.id;
+            END
+        `);
     });
 
     return {
@@ -177,7 +188,7 @@ module.exports = (connection_string) => {
         },
         getReservationsDriver: async (driver_id) => {
             return new Promise((resolve, reject) => {
-                db.all(`SELECT * FROM reservations WHERE trip_id IN (SELECT id FROM trips WHERE driver_id = ?)`, [driver_id], (err, rows) => {
+                db.all(`SELECT reservations.*, users.name AS user_name FROM reservations, users WHERE trip_id IN (SELECT id FROM trips WHERE driver_id = ?) AND user_id = users.id`, [driver_id], (err, rows) => {
                     if (err) {
                         reject(err);
                     }
@@ -248,6 +259,69 @@ module.exports = (connection_string) => {
         respondReservation: async (reservation_id, status, response) => {
             return new Promise((resolve, reject) => {
                 db.run(`UPDATE reservations SET status = ?, response = ?, response_time = ? WHERE id = ?`, [status, response, new Date(), reservation_id], function (err) {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve();
+                });
+            });
+        },
+        getAllRatings: async () => {
+            return new Promise((resolve, reject) => {
+                db.all(`SELECT r.id, r.user_id, r.creator_id, u.name AS user_name, c.name AS creator_name, r.comment, r.rating, r.time
+                        FROM ratings r
+                        JOIN users u ON r.user_id = u.id
+                        JOIN users c ON r.creator_id = c.id;`, (err, rows) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve(rows);
+                });
+            });
+        },
+        getRating: async (rating_id) => {
+            return new Promise((resolve, reject) => {
+                db.all(`SELECT * FROM ratings WHERE id = ?`, [rating_id], (err, rows) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve(rows);
+                });
+            });
+        },
+        deleteRating: async (rating_id) => {
+            return new Promise((resolve, reject) => {
+                db.run(`DELETE FROM ratings WHERE id = ?`, [rating_id], function (err) {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve();
+                });
+            });
+        },
+        getAllUsers: async () => {
+            return new Promise((resolve, reject) => {
+                db.all(`SELECT * FROM users`, (err, rows) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve(rows);
+                });
+            });
+        },
+        deleteUser: async (user_id) => {
+            return new Promise((resolve, reject) => {
+                db.run(`DELETE FROM users WHERE id = ?`, [user_id], function (err) {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve();
+                });
+            });
+        },
+        makeUserAdmin: async (user_id, is_admin) => {
+            return new Promise((resolve, reject) => {
+                db.run(`UPDATE users SET is_admin = ? WHERE id = ?`, [is_admin, user_id], function (err) {
                     if (err) {
                         reject(err);
                     }

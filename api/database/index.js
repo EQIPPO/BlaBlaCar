@@ -14,6 +14,20 @@ const validate_password = (password, hash) => {
 module.exports = (context) => {
     console.log('⚙️ Database connected');
 
+    const isAdmin = async (user_id) => {
+        try {
+            const result = await context.findUserById(user_id);
+            if (result.length === 0)
+                return false;
+
+            return result[0].is_admin;
+        }
+        catch (err) {
+            console.error(err);
+            return false;
+        }
+    }
+
     return {
         login: async (username, password) => {
             try {
@@ -199,20 +213,33 @@ module.exports = (context) => {
                     reservations.push(await context.getReservations(trip.id));
                 }
 
+                let user = null;
+                if (token) {
+                    user = jwt.verify(token, process.env.SECRET_KEY);
+                    if (!user) {
+                        return {
+                            status: 401,
+                            message: 'Unauthorized'
+                        };
+                    }
+                }
+
                 // if it's already reserved, check if it's reserved by the user
                 let filtered = [];
-                for (let i = 0; i < reservations.length; i++) {
-                    if (reservations[i].length !== 0 && reservations[i][0].status === 1) {
-                        if (token) {
-                            const user = jwt.verify(token, process.env.SECRET_KEY);
-                            if (user && user.id === reservations[i][0].user_id) {
-                                result[i].reserved = true;
-                                filtered.push(result[i]);
+                for (let i = 0; i < result.length; i++) {
+                    const trip = result[i];
+                    let reserved = false;
+                    for (let j = 0; j < reservations[i].length; j++) {
+                        if (reservations[i][j].status == 1) {
+                            // check if it's reserved by the user or this is driver's trip
+                            if (!(user && (reservations[i][j].user_id == user.id || trip.driver_id == user.id))) {
+                                reserved = true;
+                                break;
                             }
                         }
                     }
-                    else {
-                        filtered.push(result[i]);
+                    if (!reserved) {
+                        filtered.push(trip);
                     }
                 }
 
@@ -240,36 +267,32 @@ module.exports = (context) => {
                     };
                 }
 
-                // check it's reservations
+                let user = null;
+                if (token) {
+                    user = jwt.verify(token, process.env.SECRET_KEY);
+                    if (!user) {
+                        return {
+                            status: 401,
+                            message: 'Unauthorized'
+                        };
+                    }
+                }
+
                 const reservations = await context.getReservations(id);
-
-                // if it's already reserved, check if it's reserved by the user
-                if (reservations.length !== 0 && reservations[0].status === 1) {
-                    if (token) {
-                        const user = jwt.verify(token, process.env.SECRET_KEY);
-                        if (!user) {
-                            return {
-                                status: 401,
-                                message: 'Unauthorized'
-                            };
+                for (let i = 0; i < reservations.length; i++) {
+                    if (reservations[i].status === 1) {
+                        if (user && (user.id === reservations[i].user_id || user.id === result[0].driver_id)) {
+                            reservations[i].reserved = true;
                         }
-
-                        if (reservations[0].user_id !== user.id && result.driver_id !== user.id) {
+                        else {
                             return {
                                 status: 401,
                                 message: 'This trip is already reserved by another user'
                             };
                         }
-
-                        reservations[0].reserved = true;
-                    }
-                    else {
-                        return {
-                            status: 401,
-                            message: 'This trip is already reserved and you are not logged in'
-                        };
                     }
                 }
+
 
                 return {
                     status: 200,
@@ -385,10 +408,24 @@ module.exports = (context) => {
                 }
 
                 const result = await context.getReservationsPassenger(user.id);
+                for (let i = 0; i < result.length; i++) {
+                    const trip = await context.getTrip(result[i].trip_id);
+                    const reservations = await context.getReservations(result[i].trip_id);
+                    for (let j = 0; j < reservations.length; j++) {
+                        if (reservations[j].status == 1 && reservations[j].user_id != user.id) {
+                            result[i].remove = true;
+                            break;
+                        }
+                    }
+                }
+
+                // filter out trips that are not available anymore
+                const filtered = result.filter(r => !r.remove);
+
                 return {
                     status: 200,
                     message: 'Reservations retrieved successfully',
-                    reservations: result
+                    reservations: filtered
                 };
             }
             catch (err) {
@@ -418,11 +455,13 @@ module.exports = (context) => {
                 }
 
                 const reservations = await context.getReservations(tripId);
-                if (reservations.length !== 0 && reservations[0].status !== 1) {
-                    return {
-                        status: 401,
-                        message: 'This trip is already reserved'
-                    };
+                for (let i = 0; i < reservations.length; i++) {
+                    if (reservations[i].status === 1) {
+                        return {
+                            status: 401,
+                            message: 'This trip is already reserved by another user'
+                        };
+                    }
                 }
 
                 await context.addReservation(tripId, user.id, comment);
@@ -472,7 +511,7 @@ module.exports = (context) => {
                     };
                 }
 
-                if (reservation[0].status !== 1) {
+                if (reservation[0].status !== 0) {
                     return {
                         status: 401,
                         message: 'This reservation is already responded'
@@ -483,6 +522,208 @@ module.exports = (context) => {
                 return {
                     status: 200,
                     message: 'Reservation responded successfully'
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        getAllRatings: async (token) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                if (!isAdmin(user.id)) {
+                    return {
+                        status: 403,
+                        message: 'No permission'
+                    };
+                }
+
+                const result = await context.getAllRatings();
+                return {
+                    status: 200,
+                    message: 'Ratings retrieved successfully',
+                    ratings: result
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        deleteRating: async (token, id) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                if (!isAdmin(user.id)) {
+                    return {
+                        status: 403,
+                        message: 'No permission'
+                    };
+                }
+
+                const rating = await context.getRating(id);
+                if (rating.length === 0) {
+                    return {
+                        status: 404,
+                        message: 'Rating not found'
+                    };
+                }
+
+                await context.deleteRating(id);
+                return {
+                    status: 200,
+                    message: 'Rating deleted successfully'
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        getAllUsers: async (token) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                if (!isAdmin(user.id)) {
+                    return {
+                        status: 403,
+                        message: 'No permission'
+                    };
+                }
+
+                const result = await context.getAllUsers();
+                return {
+                    status: 200,
+                    message: 'Users retrieved successfully',
+                    users: result
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        deleteUser: async (token, id) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                if (!isAdmin(user.id)) {
+                    return {
+                        status: 403,
+                        message: 'No permission'
+                    };
+                }
+
+                if (user.id === id) {
+                    return {
+                        status: 401,
+                        message: 'Cannot delete yourself'
+                    };
+                }
+
+                const result = await context.findUserById(id);
+                if (result.length === 0) {
+                    return {
+                        status: 404,
+                        message: 'User not found'
+                    };
+                }
+
+                await context.deleteUser(id);
+                return {
+                    status: 200,
+                    message: 'User deleted successfully'
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        updateUser: async (token, id, data) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                if (data.is_admin === undefined || data.is_admin === null) {
+                    return {
+                        status: 400,
+                        message: 'Missing is_admin field'
+                    };
+                }
+
+                if (!isAdmin(user.id)) {
+                    return {
+                        status: 403,
+                        message: 'No permission'
+                    };
+                }
+
+                if (user.id === id) {
+                    return {
+                        status: 401,
+                        message: 'Cannot edit yourself'
+                    };
+                }
+
+                const result = await context.findUserById(id);
+                if (result.length === 0) {
+                    return {
+                        status: 404,
+                        message: 'User not found'
+                    };
+                }
+
+                await context.makeUserAdmin(id, data.is_admin);
+                return {
+                    status: 200,
+                    message: 'Changed user admin status successfully'
                 };
             }
             catch (err) {
