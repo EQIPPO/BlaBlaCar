@@ -49,7 +49,6 @@ module.exports = (connection_string) => {
             FOREIGN KEY (creator_id) REFERENCES users (id)
         )`);
 
-        // Trigger to delete reservations when trip is deleted
         db.run(`CREATE TRIGGER IF NOT EXISTS delete_user_trigger
             AFTER DELETE ON users
             FOR EACH ROW
@@ -57,6 +56,14 @@ module.exports = (connection_string) => {
                 DELETE FROM ratings WHERE user_id = OLD.id OR creator_id = OLD.id;
                 DELETE FROM trips WHERE driver_id = OLD.id;
                 DELETE FROM reservations WHERE user_id = OLD.id;
+            END
+        `);
+
+        db.run(`CREATE TRIGGER IF NOT EXISTS delete_trip_trigger
+            AFTER DELETE ON trips
+            FOR EACH ROW
+            BEGIN
+                DELETE FROM reservations WHERE trip_id = OLD.id;
             END
         `);
     });
@@ -326,6 +333,30 @@ module.exports = (connection_string) => {
                         reject(err);
                     }
                     resolve();
+                });
+            });
+        },
+        getAllTrips: async () => {
+            return new Promise((resolve, reject) => {
+                db.all(`SELECT trips.*, users.name AS driver_name FROM trips, users WHERE users.id = trips.driver_id`, (err, rows) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve(rows);
+                });
+            });
+        },
+        getAllReservations: async () => {
+            return new Promise((resolve, reject) => {
+                db.all(`SELECT reservations.*, driver.id AS driver_id, driver.name AS driver_name, client.name AS client_name
+                        FROM reservations
+                        JOIN trips ON reservations.trip_id = trips.id
+                        JOIN users AS driver ON trips.driver_id = driver.id
+                        JOIN users AS client ON reservations.user_id = client.id`, (err, rows) => {
+                    if (err) {
+                        reject(err);
+                    }
+                    resolve(rows);
                 });
             });
         }

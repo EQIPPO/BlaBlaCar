@@ -733,6 +733,148 @@ module.exports = (context) => {
                     message: 'Internal server error'
                 };
             }
+        },
+        getAllTrips: async (token) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                if (!isAdmin(user.id)) {
+                    return {
+                        status: 403,
+                        message: 'No permission'
+                    };
+                }
+
+                const result = await context.getAllTrips();
+                return {
+                    status: 200,
+                    message: 'Trips retrieved successfully',
+                    trips: result
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        deleteTrip: async (token, id) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                if (!isAdmin(user.id)) {
+                    return {
+                        status: 403,
+                        message: 'No permission'
+                    };
+                }
+
+                const result = await context.getTrip(id);
+                if (result.length === 0) {
+                    return {
+                        status: 404,
+                        message: 'Trip not found'
+                    };
+                }
+
+                await context.deleteTrip(id);
+                return {
+                    status: 200,
+                    message: 'Trip deleted successfully'
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        getAllReservations: async (token) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                if (!isAdmin(user.id)) {
+                    return {
+                        status: 403,
+                        message: 'No permission'
+                    };
+                }
+
+                const result = await context.getAllReservations();
+                return {
+                    status: 200,
+                    message: 'Reservations retrieved successfully',
+                    reservations: result
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
+        },
+        deleteReservation: async (token, id) => {
+            try {
+                const user = jwt.verify(token, process.env.SECRET_KEY);
+                if (!user) {
+                    return {
+                        status: 401,
+                        message: 'Unauthorized'
+                    };
+                }
+
+                if (!isAdmin(user.id)) {
+                    return {
+                        status: 403,
+                        message: 'No permission'
+                    };
+                }
+
+                const result = await context.getReservation(id);
+                if (result.length === 0) {
+                    return {
+                        status: 404,
+                        message: 'Reservation not found'
+                    };
+                }
+
+                await context.deleteReservation(id);
+                return {
+                    status: 200,
+                    message: 'Reservation deleted successfully'
+                };
+            }
+            catch (err) {
+                console.error(err);
+                return {
+                    status: 500,
+                    message: 'Internal server error'
+                };
+            }
         }
     }
 }
